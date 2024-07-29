@@ -1,83 +1,227 @@
 // controllers/subCategoryController.js
-
-
-const mongoose = require('mongoose');
 const SubCategory = require('../models/subCategory');
+const mongoose = require('mongoose');
+const { getSocket } = require('../config/socket');
 
-const createSubCategory = async (req, res) => {
+
+// Create a new subcategory
+createSubCategory = async (req, res) => {
   try {
-    const { name, category, isFeatured, isNewArrival } = req.body;
+    const { name, slug, link, isFeatured, isNewArrival } = req.body;
+    const newSubCategory = new SubCategory({
+      name,
+      slug,
+      link,
+      isFeatured,
+      isNewArrival
+    });
+    await newSubCategory.save();
 
-    // Validate category ObjectId
-    if (!mongoose.Types.ObjectId.isValid(category)) {
-      return res.status(400).json({ error: 'Invalid category ID format' });
-    }
+    const io = getSocket();
+    io.emit('createSubCategory', subCategories); // Emit real-time event
+    
 
-    const subCategory = new SubCategory({ name, category, isFeatured, isNewArrival });
-    await subCategory.save();
-
-    res.status(201).json(subCategory);
+    res.status(201).json(newSubCategory);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(400).json({ error: error.message });
   }
 };
 
-const changeNewArrivalToFeatured = async (req, res) => {
+// Change new arrivals to featured subcategories
+changeNewArrivalToFeatured = async (req, res) => {
   try {
-    const subCategoryId = req.params.id;
-    const subCategory = await SubCategory.findById(subCategoryId);
+    const { months = 2 } = req.body;
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - months);
 
-    if (!subCategory) {
-      return res.status(404).json({ message: 'SubCategory not found' });
-    }
+    const updatedSubCategories = await SubCategory.updateMany(
+      { isNewArrival: true, createdAt: { $lte: cutoffDate } },
+      { $set: { isNewArrival: false, isFeatured: true } }
+    );
 
-    subCategory.isNewArrival = false;
-    subCategory.isFeatured = true;
-    await subCategory.save();
-
-    res.status(200).json({ message: 'SubCategory changed from new arrival to featured' });
+    res.status(200).json({ message: "Updated new arrivals to featured", updatedSubCategories });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(400).json({ error: error.message });
   }
 };
 
-const getFeaturedSubCategories = async (req, res) => {
+// Get all featured subcategories
+getFeaturedSubCategories = async (req, res) => {
   try {
     const featuredSubCategories = await SubCategory.find({ isFeatured: true });
     res.status(200).json(featuredSubCategories);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(400).json({ error: error.message });
   }
 };
 
-const getNewArrivalSubCategories = async (req, res) => {
+// Get all new arrival subcategories
+getNewArrivalSubCategories = async (req, res) => {
   try {
     const newArrivalSubCategories = await SubCategory.find({ isNewArrival: true });
     res.status(200).json(newArrivalSubCategories);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(400).json({ error: error.message });
   }
 };
 
-// New function to get all subcategories
-const getAllSubCategories = async (req, res) => {
+// Get all subcategories
+getAllSubCategories = async (req, res) => {
   try {
-    const allSubCategories = await SubCategory.find();
-    res.status(200).json(allSubCategories);
+    const subCategories = await SubCategory.find();
+    res.status(200).json(subCategories);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Soft delete a subcategory
+// softDeleteSubCategories = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const subCategory = await SubCategory.findByIdAndUpdate(id, { $set: { isActive: false } }, { new: true });
+//     if (!subCategory) {
+//       return res.status(404).json({ error: "Subcategory not found" });
+//     }
+//     res.status(200).json(subCategory);
+//   } catch (error) {
+//     res.status(400).json({ error: error.message });
+//   }
+// };
+const softDeleteSubCategories = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const subCategories = await SubCategory.findById(id);
+    if (!subCategories) {
+      return res.status(404).json({ message: 'SubCategories not found' });
+    }
+
+    subCategories.isActive = false;
+    await subCategories.save();
+
+  
+    const io = getSocket();
+    io.emit('softDeleteSubCategories', subCategories); // Emit real-time event
+
+    res.status(200).json({ message: 'SubCategories deleted successfully (deactivated)' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-
-
-module.exports = {
+ module.exports = {
   createSubCategory,
   changeNewArrivalToFeatured,
   getFeaturedSubCategories,
   getNewArrivalSubCategories,
-  getAllSubCategories
-};
+  getAllSubCategories,
+  softDeleteSubCategories
+  };
+
+
+
+
+
+
+
+
+
+
+
+
+
+// const mongoose = require('mongoose');
+// const SubCategory = require('../models/subCategory');
+
+// const createSubCategory = async (req, res) => {
+//   try {
+//     const { name, slug, link, isFeatured, isNewArrival } = req.body;
+
+//     // Validate category ObjectId
+//     if (!mongoose.Types.ObjectId.isValid(subcategory)) {
+//       return res.status(400).json({ error: 'Invalid sub category ID format' });
+//     }
+
+//     const subCategory = new SubCategory({ name, slug, link, isFeatured, isNewArrival });
+//     await subCategory.save();
+
+//     res.status(201).json(subCategory);
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// };
+
+// const changeNewArrivalToFeatured = async (req, res) => {
+//   try {
+//     const subCategoryId = req.params.id;
+//     const subCategory = await SubCategory.findById(subCategoryId);
+
+//     if (!subCategory) {
+//       return res.status(404).json({ message: 'SubCategory not found' });
+//     }
+
+//     subCategory.isNewArrival = false;
+//     subCategory.isFeatured = true;
+//     await subCategory.save();
+
+//     res.status(200).json({ message: 'SubCategory changed from new arrival to featured' });
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// };
+
+// const getFeaturedSubCategories = async (req, res) => {
+//   try {
+//     const featuredSubCategories = await SubCategory.find({ isFeatured: true });
+//     res.status(200).json(featuredSubCategories);
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// };
+
+// const getNewArrivalSubCategories = async (req, res) => {
+//   try {
+//     const newArrivalSubCategories = await SubCategory.find({ isNewArrival: true });
+//     res.status(200).json(newArrivalSubCategories);
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// };
+
+// // New function to get all subcategories
+// const getAllSubCategories = async (req, res) => {
+//   try {
+//     const allSubCategories = await SubCategory.find();
+//     res.status(200).json(allSubCategories);
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// };
+// const softDeleteSubCategories = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const subCategories = await SubCategory.findById(id);
+//     if (!subCategories) {
+//       return res.status(404).json({ message: 'SubCategories not found' });
+//     }
+
+//     subCategories.isActive = false;
+//     await subCategories.save();
+//     res.status(200).json({ message: 'SubCategories deleted successfully (deactivated)' });
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// };
+
+
+// module.exports = {
+//   createSubCategory,
+//   changeNewArrivalToFeatured,
+//   getFeaturedSubCategories,
+//   getNewArrivalSubCategories,
+//   getAllSubCategories,
+//   softDeleteSubCategories
+// };
 
 
 

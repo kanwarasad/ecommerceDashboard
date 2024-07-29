@@ -2,8 +2,10 @@
 const mongoose = require('mongoose');
 
 const subCategorySchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
+  // category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
+  name: { type: String, required: true },  
+  slug: { type: String, required: true },
+  link: { type: String, required: true },
   isFeatured: { type: Boolean, default: false },
   isNewArrival: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }

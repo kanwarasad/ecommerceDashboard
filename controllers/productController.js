@@ -1,20 +1,51 @@
 const Product = require('../models/product');
-const mongoose = require('mongoose');
-const cloudinary = require('cloudinary').v2;
+// const mongoose = require('mongoose');
+const { getSocket } = require('./../config/socket');
+const cloudinary = require('./../config/cloudinaryConfig'); // Import Cloudinary configuration
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
+
 
 const createProduct = async (req, res) => {
   try {
-    const { name, category, subcategory, description, price, size, color, stock, brand, isFeatured, isNewArrival, images } = req.body;
-    const product = new Product({ name, category, subcategory, description, price, size, color, stock, brand, isFeatured, isNewArrival, images });
+    const { name, category, subcategory, description, price, size, color, stock, brand, isFeatured, isNewArrival } = req.body;
+   
+      //  // Upload images to Cloudinary
+       const imageUploadPromises = req.files.map(file => cloudinary.uploader.upload(file.path));
+       const imageUploadResults = await Promise.all(imageUploadPromises);
+       const images = imageUploadResults.map(result => result.secure_url);
+   
+   
+      // Get the uploaded images' URLs
+    // const images = req.files.map(file => file.path);
+   
+    const product = new Product({ 
+      name, 
+      category, 
+      subcategory, 
+      description, 
+      price, 
+      size, 
+      color, 
+      stock, 
+      brand, 
+      images,
+      isFeatured, 
+      isNewArrival 
+    });
+
+    console.log(JSON.stringify(product)); // Logs 
+    console.log("User info: " + JSON.stringify(product)); // 
+    document.body.innerHTML = JSON.stringify(product); // Renders
+    
+
 
     await product.save();
+    
+    const io = getSocket();
+    io.emit('productCreated', product); // Emit real-time event
+
+
+
     res.status(201).json(product);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -32,6 +63,10 @@ const updateProduct = async (req, res) => {
       return res.status(404).json({ message: 'Product not found' });
     }
 
+    const io = getSocket();
+    io.emit('updateProduct', product); // Emit real-time event
+
+    
     res.status(200).json(product);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -42,6 +77,7 @@ const getProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const product = await Product.findById(id);
+    // .populate('category').populate('subcategory').populate('review');
     if (!product) {
       return res.status(404).json({ message: 'Product not found' });
     }
@@ -54,8 +90,9 @@ const getProduct = async (req, res) => {
 
 const getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find();
+    const products = await Product.find({ isActive: true });
     res.status(200).json(products);
+    // .populate('category').populate('subcategory');
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -71,7 +108,13 @@ const softDeleteProduct = async (req, res) => {
 
     product.isActive = false;
     await product.save();
-    res.status(200).json({ message: 'Product Deleted Successfully (deactivated)' });
+
+    const io = getSocket();
+    io.emit('softDeleteProduct', product); // Emit real-time event
+
+
+
+    res.status(200).json({ message: 'Product deleted successfully (deactivated)' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -87,9 +130,33 @@ const changeNewArrivalToFeatured = async () => {
       { $set: { isNewArrival: false, isFeatured: true } }
     );
 
-    console.log('New arrivals older than two months have been updated to featured products');
+    const io = getSocket();
+    io.emit('changeNewArrivalToFeatured'); // Emit real-time event
+
+
+    res.status(200).json({ message: 'New arrivals older than two months have been updated to featured products' });
   } catch (error) {
-    console.error('Error updating new arrivals to featured products:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const getFeaturedProducts = async (req, res) => {
+  try {
+    const products = await Product.find({ isFeatured: true, isActive: true });
+    // .populate('category').populate('subcategory');
+    res.status(200).json(products);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const getNewArrivalProducts = async (req, res) => {
+  try {
+    const products = await Product.find({ isNewArrival: true, isActive: true });
+    // .populate('category').populate('subcategory');
+    res.status(200).json(products);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
 
@@ -102,9 +169,10 @@ module.exports = {
   getProduct,
   getAllProducts,
   softDeleteProduct,
-  changeNewArrivalToFeatured
+  changeNewArrivalToFeatured,
+  getFeaturedProducts,
+  getNewArrivalProducts
 };
-
 
 
 
